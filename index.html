@@ -791,21 +791,15 @@ function drawCard() {
   ctx.font = `500 40px ${mono}`;
   ctx.fillText(`#${puzzleNo(store.day)} · ${prettyDate(store.day)}`, W / 2, 570);
 
-  // Today's board as solved, with the pals in place.
+  // Today's board, patches only, so the card never gives away the answer.
   const size = 640, gap = 70 / n, x0 = (W - size) / 2, y0 = 660;
   const cell = (size - gap * (n - 1)) / n;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.font = `${Math.round(cell * 0.66)}px ${emojiFont}`;
   for (let i = 0; i < n * n; i++) {
     const r = (i / n) | 0, c = i % n;
-    const x = x0 + c * (cell + gap), y = y0 + r * (cell + gap);
     ctx.fillStyle = CARD_COLORS[S.colors[S.regions[i]]];
-    roundRect(ctx, x, y, cell, cell, cell * 0.16);
+    roundRect(ctx, x0 + c * (cell + gap), y0 + r * (cell + gap), cell, cell, cell * 0.16);
     ctx.fill();
-    if (S.marks[i] === 2) ctx.fillText(S.emoji, x + cell / 2, y + cell / 2 + cell * 0.04);
   }
-  ctx.textBaseline = "alphabetic";
 
   ctx.textAlign = "left";
   let y = 1440;
