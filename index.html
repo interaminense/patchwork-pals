@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Patchwork Pals</title>
+<meta name="description" content="A daily emoji logic puzzle. Place one pal in every row, column and colored patch, with no two touching.">
+<meta property="og:title" content="Patchwork Pals">
+<meta property="og:description" content="A daily emoji logic puzzle. Four levels, one puzzle each per day.">
+<meta property="og:url" content="https://interaminense.github.io/patchwork-pals/">
+<meta name="theme-color" content="#f5f4f0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐼</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: colored-patch board left, tool rail right; stacks to one column on phones. One puzzle per level per day. */
+:root {
+  --paper: #f5f4f0;
+  --surface: #ffffff;
+  --ink: #1f2330;
+  --muted: #646a78;
+  --thin: rgba(31, 35, 48, 0.16);
+  --error: #c8312e;
+  --ok: #1f7a4d;
+  --scrim: rgba(20, 22, 30, 0.55);
+  --x: rgba(20, 16, 30, 0.55);
+  --dim: rgba(245, 244, 240, 0.62);
+  --r0: #ff6b6b; --r1: #ffc233; --r2: #8ad13a; --r3: #2ec4b6; --r4: #4d96ff;
+  --r5: #a66cf0; --r6: #f765b8; --r7: #ff8c42; --r8: #22c3f5;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121419; --surface: #1a1d25; --ink: #e8e6e0; --muted: #9ba0ac;
+    --thin: rgba(232, 230, 224, 0.12); --error: #ff7d75; --ok: #5fd39a; --scrim: rgba(0, 0, 0, 0.65);
+    --x: rgba(232, 230, 224, 0.75); --dim: rgba(18, 20, 25, 0.62);
+    --r0: #e85555; --r1: #e6a817; --r2: #72b52a; --r3: #20a99c; --r4: #3b7de6;
+    --r5: #8c52d9; --r6: #db4a9d; --r7: #e8742c; --r8: #12a5d6;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #121419; --surface: #1a1d25; --ink: #e8e6e0; --muted: #9ba0ac;
+  --thin: rgba(232, 230, 224, 0.12); --error: #ff7d75; --ok: #5fd39a; --scrim: rgba(0, 0, 0, 0.65);
+  --x: rgba(232, 230, 224, 0.75); --dim: rgba(18, 20, 25, 0.62);
+  --r0: #e85555; --r1: #e6a817; --r2: #72b52a; --r3: #20a99c; --r4: #3b7de6;
+  --r5: #8c52d9; --r6: #db4a9d; --r7: #e8742c; --r8: #12a5d6;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-display);
+  padding-block: 28px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+h1 { margin: 0; font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+.meta { font-family: var(--font-mono); font-size: 0.8rem; color: var(--muted); }
+.em { font-family: var(--font-emoji); font-weight: 400; }
+
+.game {
+  display: grid;
+  grid-template-columns: minmax(0, 520px) minmax(240px, 300px);
+  gap: 28px;
+  justify-content: center;
+  align-items: start;
+}
+
+/* Board */
+.board-wrap { container-type: inline-size; width: 100%; min-width: 0; }
+.board {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 100%;
+  gap: var(--gap, 1.2cqi);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.cell {
+  position: relative;
+  border: 0;
+  border-radius: var(--radius, 1.6cqi);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 -0.5cqi 0 rgba(0, 0, 0, 0.14);
+  transition: transform 120ms, filter 120ms;
+}
+.board:not(.locked) .cell:hover { filter: brightness(1.08) saturate(1.1); transform: translateY(-1px); }
+.board.locked .cell { cursor: default; }
+.cell:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.cell .cat { font-size: var(--cat-size, 9cqi); line-height: 1; font-family: var(--font-emoji); }
+.cell.marked::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: var(--dim);
+}
+.cell .x { position: relative; font-family: var(--font-mono); font-size: var(--x-size, 5cqi); font-weight: 500; color: var(--x); line-height: 1; }
+.cell.bad { box-shadow: inset 0 0 0 0.8cqi var(--error); }
+.cell.bad::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: repeating-linear-gradient(-45deg, transparent 0 6px, rgba(255, 255, 255, 0.35) 6px 9px);
+}
+.cell.pop .cat { animation: pop 200ms ease-out; }
+@keyframes pop { from { transform: scale(0.4) rotate(-12deg); } to { transform: scale(1) rotate(0); } }
+
+/* Win banner */
+.win {
+  display: grid; gap: 10px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--ok);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.win strong { color: var(--ok); font-size: 1.1rem; }
+.win p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+.win .next { font-family: var(--font-mono); font-size: 0.8rem; }
+.share { display: flex; flex-wrap: wrap; gap: 8px; }
+.status { min-height: 1.2em; font-size: 0.82rem; color: var(--ok); margin: 0; }
+.fallback {
+  width: 100%; min-height: 8.5em; resize: vertical; font-family: var(--font-mono); font-size: 0.78rem;
+  border: 1px solid var(--thin); border-radius: 8px; padding: 8px; background: var(--paper); color: var(--ink);
+}
+
+/* Rail */
+.rail { display: grid; gap: 18px; min-width: 0; }
+.stats { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.stat { display: grid; gap: 2px; }
+.stat.right { text-align: right; }
+.big { font-family: var(--font-mono); font-size: 2rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 8px 2px; display: grid; gap: 1px; justify-items: center; }
+.seg button b { font-weight: 600; font-size: 0.85rem; }
+.seg button small { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.seg button.solved small { color: var(--ok); font-weight: 500; }
+.seg button + button { border-left: 1.5px solid var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.seg button[aria-pressed="true"] small { color: inherit; opacity: 0.75; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1.5px solid var(--thin); background: var(--surface); border-radius: 8px;
+  padding: 9px 12px; font-weight: 600; font-size: 0.92rem; color: var(--ink); text-decoration: none;
+}
+.btn:hover:not(:disabled) { border-color: var(--ink); }
+.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+.head-side { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.head-side .btn { padding: 6px 12px; font-size: 0.85rem; }
+.rules { display: grid; gap: 10px; }
+.rules ol { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 0.95rem; line-height: 1.45; }
+.sheet .rules p { font-size: 0.85rem; }
+
+/* Instagram sheet */
+.modal {
+  position: fixed; inset: 0; z-index: 20;
+  display: grid; place-items: center;
+  background: var(--scrim);
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.sheet {
+  width: 100%; max-width: 400px; max-height: 100%; overflow: auto;
+  display: grid; gap: 12px; padding: 16px;
+  background: var(--surface); border-radius: 14px;
+}
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet img { width: 100%; max-height: 52vh; object-fit: contain; border-radius: 10px; background: #15171d; }
+.sheet p { margin: 0; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
+
+@media (max-width: 760px) {
+  .game { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .board-wrap, .rail { max-width: 520px; width: 100%; margin: 0 auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell { transition: none; }
+  .cell.pop .cat { animation: none; }
+  .board:not(.locked) .cell:hover { transform: none; }
+}
+
+:root {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+body { margin: 0; font-size: 14px; }
+img { max-width: 100%; }
+.site-footer {
+  max-width: 860px; margin: 40px auto 0; padding-top: 20px;
+  border-top: 1px solid var(--thin);
+  display: grid; gap: 12px; justify-items: center;
+}
+.site-footer p { margin: 0; font-size: 0.8rem; color: var(--muted); }
+.ad-slot:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Patchwork Pals <span class="em" aria-hidden="true"></span></h1>
+    <div class="head-side">
+      <span class="meta" id="meta"></span>
+      <button class="btn" id="help-open">How to play</button>
+    </div>
+  </header>
+
+  <div class="game">
+    <div class="board-wrap">
+      <div class="board" id="board" role="grid" aria-label="Puzzle board"></div>
+    </div>
+
+    <aside class="rail">
+      <div class="win" id="win" hidden>
+        <strong id="win-title"></strong>
+        <p id="win-text"></p>
+        <p class="next">Next puzzles in <span id="countdown">--:--:--</span></p>
+        <div class="share">
+          <button class="btn primary" id="copy">Copy result</button>
+          <a class="btn" id="share-x" href="https://x.com/intent/post" target="_blank" rel="noopener">Post on X</a>
+          <button class="btn" id="share-ig">Instagram</button>
+        </div>
+        <p class="status" id="copy-status" role="status"></p>
+        <textarea class="fallback" id="fallback" readonly hidden aria-label="Result text to copy"></textarea>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="label">Placed</span>
+          <span class="big" id="count">0/6</span>
+        </div>
+        <div class="stat right">
+          <span class="label">Time</span>
+          <span class="big" id="timer">00:00</span>
+        </div>
+      </div>
+
+      <div style="display:grid;gap:8px">
+        <span class="label">Today's puzzles</span>
+        <div class="seg" id="diff">
+          <button data-d="6"><b>Easy</b><small></small></button>
+          <button data-d="7"><b>Medium</b><small></small></button>
+          <button data-d="8"><b>Hard</b><small></small></button>
+          <button data-d="9"><b>Expert</b><small></small></button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="undo">Undo</button>
+        <button class="btn" id="clear">Clear</button>
+        <button class="btn" id="hint">Hint</button>
+      </div>
+
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="help" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="sheet-head">
+      <strong id="help-title">How to play</strong>
+      <button class="btn" id="help-close">Close</button>
+    </div>
+      <div class="rules">
+        <ol>
+          <li>Place one <span class="em"></span> in every row and every column.</li>
+          <li>Each colored patch gets exactly one <span class="em"></span>.</li>
+          <li>No two <span class="em"></span> can touch, not even diagonally.</li>
+        </ol>
+        <p>Tap a cell once to mark it with ×, twice to place a <span class="em"></span>, and a third time to clear it. Pieces that break a rule get a red outline.</p>
+        <p>Drag across cells to mark several with × at once. Start the drag on a × to erase them instead.</p>
+        <p>Each level has one puzzle a day, the same for everyone. The clock starts on your first move.</p>
+      </div>
+    <button class="btn primary" id="help-ok">Let's play</button>
+  </div>
+</div>
+
+
+<footer class="site-footer">
+  <!-- Ad slot: paste your AdSense <ins class="adsbygoogle"> unit here once the site is approved. -->
+  <div class="ad-slot" id="ad-slot"></div>
+  <p>Patchwork Pals · a new puzzle every day</p>
+</footer>
+
+<div class="modal" id="ig" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ig-title">
+    <div class="sheet-head">
+      <strong id="ig-title">Share to Instagram</strong>
+      <button class="btn" id="ig-close">Close</button>
+    </div>
+    <img id="ig-img" alt="Your Patchwork Pals result card">
+    <p>Save this card by long-pressing it on a phone or right-clicking it on a computer, or copy it. Then add it to your Instagram story.</p>
+    <div class="share">
+      <button class="btn primary" id="ig-copy">Copy image</button>
+      <a class="btn" href="https://www.instagram.com/" target="_blank" rel="noopener">Open Instagram</a>
+    </div>
+    <p class="status" id="ig-status" role="status"></p>
+  </div>
+</div>
+
+<script>
+const LEVELS = { 6: "Easy", 7: "Medium", 8: "Hard", 9: "Expert" };
+const STORE_KEY = "patchwork-pals-daily-v1";
+const SHARE_URL = "https://interaminense.github.io/patchwork-pals/";
+const EPOCH = new Date(2026, 9, 24);
+const CARD_COLORS = ["#ff6b6b", "#ffc233", "#8ad13a", "#2ec4b6", "#4d96ff", "#a66cf0", "#f765b8", "#ff8c42", "#22c3f5"];
+const PALS = [
+  ["🐱", "cat"], ["🐶", "dog"], ["🦊", "fox"], ["🐸", "frog"], ["🐼", "panda"], ["🐨", "koala"],
+  ["🐯", "tiger"], ["🦁", "lion"], ["🐵", "monkey"], ["🐧", "penguin"], ["🦉", "owl"], ["🐙", "octopus"],
+  ["🦄", "unicorn"], ["🐝", "bee"], ["🐢", "turtle"], ["🐰", "bunny"], ["🐹", "hamster"], ["🐻", "bear"],
+  ["🐷", "pig"], ["🦔", "hedgehog"], ["🐳", "whale"], ["🦖", "dino"], ["👻", "ghost"], ["🤖", "robot"],
+];
+
+// Seeded randomness so every player gets the same puzzle for a given day and level.
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32(a) {
+  return function () {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let rand = Math.random;
+
+function dayKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dayDate(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+function puzzleNo(key) { return Math.round((dayDate(key) - EPOCH) / 86400000) + 1; }
+function palFor(key) { return PALS[hashStr(key) % PALS.length]; }
+function prettyDate(key) {
+  return dayDate(key).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (rand() * (i + 1)) | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const range = (n) => [...Array(n).keys()];
+
+function placeCats(n) {
+  const cols = [], used = new Array(n).fill(false);
+  (function go(r) {
+    if (r === n) return true;
+    for (const c of shuffle(range(n))) {
+      if (used[c] || (r > 0 && Math.abs(c - cols[r - 1]) <= 1)) continue;
+      used[c] = true;
+      cols[r] = c;
+      if (go(r + 1)) return true;
+      used[c] = false;
+    }
+    return false;
+  })(0);
+  return cols;
+}
+
+function neighbors(i, n) {
+  const r = (i / n) | 0, c = i % n, out = [];
+  if (r > 0) out.push(i - n);
+  if (r < n - 1) out.push(i + n);
+  if (c > 0) out.push(i - 1);
+  if (c < n - 1) out.push(i + 1);
+  return out;
+}
+
+function growRegions(n, cats) {
+  const reg = new Array(n * n).fill(-1);
+  cats.forEach((c, r) => { reg[r * n + c] = r; });
+  let left = n * n - n;
+  while (left > 0) {
+    const frontier = [];
+    for (let i = 0; i < n * n; i++) {
+      if (reg[i] < 0 && neighbors(i, n).some((q) => reg[q] >= 0)) frontier.push(i);
+    }
+    const i = frontier[(rand() * frontier.length) | 0];
+    const owners = neighbors(i, n).filter((q) => reg[q] >= 0);
+    reg[i] = reg[owners[(rand() * owners.length) | 0]];
+    left--;
+  }
+  return reg;
+}
+
+function solve(reg, n, limit) {
+  const sols = [], cols = [];
+  let colMask = 0, regMask = 0;
+  (function go(r) {
+    if (r === n) { sols.push(cols.slice()); return sols.length >= limit; }
+    for (let c = 0; c < n; c++) {
+      const g = reg[r * n + c];
+      if ((colMask >> c) & 1 || (regMask >> g) & 1) continue;
+      if (r > 0 && Math.abs(c - cols[r - 1]) <= 1) continue;
+      cols[r] = c;
+      colMask |= 1 << c;
+      regMask |= 1 << g;
+      const stop = go(r + 1);
+      colMask &= ~(1 << c);
+      regMask &= ~(1 << g);
+      if (stop) return true;
+    }
+    return false;
+  })(0);
+  return sols;
+}
+
+function connected(reg, n, g) {
+  const cells = range(n * n).filter((i) => reg[i] === g);
+  const seen = new Set([cells[0]]), stack = [cells[0]];
+  while (stack.length) {
+    for (const q of neighbors(stack.pop(), n)) {
+      if (reg[q] === g && !seen.has(q)) { seen.add(q); stack.push(q); }
+    }
+  }
+  return seen.size === cells.length;
+}
+
+// Grow random regions around a valid layout, then nudge cells between
+// regions until that layout is the only solution.
+function generate(n, day) {
+  rand = mulberry32(hashStr(`${day}:${n}`));
+  try {
+    for (;;) {
+      const cats = placeCats(n);
+      const reg = growRegions(n, cats);
+      for (let step = 0; step < 400; step++) {
+        const sols = solve(reg, n, 2);
+        if (sols.length === 1) {
+          return { regions: reg, solution: cats, colors: shuffle(range(9)).slice(0, n) };
+        }
+        const alt = sols.find((s) => s.some((c, r) => c !== cats[r]));
+        let changed = false;
+        for (const p of shuffle(alt.map((c, r) => r * n + c).filter((p) => cats[(p / n) | 0] !== p % n))) {
+          const old = reg[p];
+          for (const g of shuffle([...new Set(neighbors(p, n).map((q) => reg[q]))].filter((g) => g !== old))) {
+            reg[p] = g;
+            if (connected(reg, n, old)) { changed = true; break; }
+          }
+          if (changed) break;
+          reg[p] = old;
+        }
+        if (!changed) break;
+      }
+    }
+  } finally {
+    rand = Math.random;
+  }
+}
+
+let store = null;
+let puzzles = {};
+let S = null;
+let popped = -1;
+
+function freshStore(day, last) { return { day, last: last || 6, games: {} }; }
+function loadStore() {
+  const today = dayKey();
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (s && s.day === today && s.games) return s;
+    if (s && LEVELS[s.last]) return freshStore(today, s.last);
+  } catch (_) {}
+  return freshStore(today);
+}
+function saveStore() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (_) {}
+}
+function persist() {
+  store.games[S.n] = { marks: S.marks, seconds: S.seconds, hints: S.hints, done: S.done, started: S.started };
+  store.last = S.n;
+  saveStore();
+}
+
+function openLevel(n) {
+  const day = store.day;
+  puzzles[n] = puzzles[n] || generate(n, day);
+  const saved = store.games[n];
+  const [emoji, pal] = palFor(day);
+  S = {
+    n, day, emoji, pal, ...puzzles[n],
+    marks: saved && saved.marks && saved.marks.length === n * n ? saved.marks.slice() : new Array(n * n).fill(0),
+    seconds: (saved && saved.seconds) || 0,
+    hints: (saved && saved.hints) || 0,
+    done: !!(saved && saved.done),
+    started: !!(saved && saved.started),
+    history: [],
+  };
+  popped = -1;
+  buildBoard();
+  persist();
+  render();
+}
+
+function push() {
+  S.history.push(S.marks.slice());
+  if (S.history.length > 300) S.history.shift();
+}
+function tap(i) {
+  if (S.done) return;
+  S.started = true;
+  push();
+  S.marks[i] = (S.marks[i] + 1) % 3;
+  popped = S.marks[i] === 2 ? i : -1;
+  after();
+}
+function undo() {
+  if (S.done || !S.history.length) return;
+  S.marks = S.history.pop();
+  popped = -1;
+  after();
+}
+function clearBoard() {
+  if (S.done || !S.marks.some(Boolean)) return;
+  push();
+  S.marks.fill(0);
+  popped = -1;
+  after();
+}
+function hint() {
+  if (S.done) return;
+  const n = S.n;
+  S.started = true;
+  push();
+  const wrong = S.marks.findIndex((m, i) => m === 2 && S.solution[(i / n) | 0] !== i % n);
+  if (wrong >= 0) {
+    S.marks[wrong] = 1;
+    popped = -1;
+  } else {
+    const r = S.solution.findIndex((c, r) => S.marks[r * n + c] !== 2);
+    if (r < 0) { S.history.pop(); return; }
+    S.marks[r * n + S.solution[r]] = 2;
+    popped = r * n + S.solution[r];
+  }
+  S.hints++;
+  after();
+}
+function after() {
+  const n = S.n;
+  if (!S.done && S.solution.every((c, r) => S.marks[r * n + c] === 2) &&
+      S.marks.filter((m) => m === 2).length === n) {
+    S.done = true;
+    S.history = [];
+  }
+  persist();
+  render();
+}
+
+function conflicts() {
+  const n = S.n, bad = new Set();
+  const placed = range(n * n).filter((i) => S.marks[i] === 2);
+  for (let a = 0; a < placed.length; a++) {
+    for (let b = a + 1; b < placed.length; b++) {
+      const i = placed[a], j = placed[b];
+      const ri = (i / n) | 0, ci = i % n, rj = (j / n) | 0, cj = j % n;
+      if (ri === rj || ci === cj || S.regions[i] === S.regions[j] ||
+          (Math.abs(ri - rj) <= 1 && Math.abs(ci - cj) <= 1)) {
+        bad.add(i);
+        bad.add(j);
+      }
+    }
+  }
+  return bad;
+}
+
+const boardEl = document.getElementById("board");
+let cells = [];
+
+function buildBoard() {
+  const n = S.n;
+  boardEl.innerHTML = "";
+  boardEl.style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`;
+  boardEl.style.gridTemplateRows = `repeat(${n}, minmax(0, 1fr))`;
+  boardEl.style.setProperty("--x-size", `${(36 / n).toFixed(2)}cqi`);
+  boardEl.style.setProperty("--cat-size", `${(56 / n).toFixed(2)}cqi`);
+  boardEl.style.setProperty("--gap", `${(7 / n).toFixed(2)}cqi`);
+  boardEl.style.setProperty("--radius", `${(10 / n).toFixed(2)}cqi`);
+  cells = range(n * n).map((i) => {
+    const b = document.createElement("button");
+    b.className = "cell";
+    b.style.background = `var(--r${S.colors[S.regions[i]]})`;
+    b.dataset.i = i;
+    b.setAttribute("role", "gridcell");
+    // Pointer taps and drags are handled on the board; this covers Enter and Space.
+    b.addEventListener("click", (e) => { if (e.detail === 0) tap(i); });
+    boardEl.appendChild(b);
+    return b;
+  });
+}
+
+let drag = null;
+
+function cellAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const cell = el && el.closest(".cell");
+  return cell && boardEl.contains(cell) ? +cell.dataset.i : -1;
+}
+function dragMark(i) {
+  const m = S.marks[i];
+  if (drag.erase ? m !== 1 : m !== 0) return;
+  S.marks[i] = drag.erase ? 0 : 1;
+  popped = -1;
+  render();
+}
+boardEl.addEventListener("pointerdown", (e) => {
+  const cell = e.target.closest(".cell");
+  if (!cell || !S || S.done || e.button > 0) return;
+  e.preventDefault();
+  const start = +cell.dataset.i;
+  drag = { start, moved: false, erase: S.marks[start] === 1 };
+  boardEl.setPointerCapture?.(e.pointerId);
+});
+boardEl.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const i = cellAt(e.clientX, e.clientY);
+  if (i < 0) return;
+  if (!drag.moved) {
+    if (i === drag.start) return;
+    drag.moved = true;
+    S.started = true;
+    push();
+    dragMark(drag.start);
+  }
+  dragMark(i);
+});
+boardEl.addEventListener("pointerup", () => {
+  if (!drag) return;
+  const { start, moved } = drag;
+  drag = null;
+  if (moved) persist();
+  else tap(start);
+});
+boardEl.addEventListener("pointercancel", () => {
+  if (drag && drag.moved) persist();
+  drag = null;
+});
+
+function fmt(s) {
+  return `${String((s / 60) | 0).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+function untilMidnight() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const s = Math.max(0, Math.round((next - now) / 1000));
+  return [s / 3600, (s % 3600) / 60, s % 60].map((v) => String(v | 0).padStart(2, "0")).join(":");
+}
+
+function resultText() {
+  const lines = Object.keys(LEVELS).map((k) => {
+    const g = store.games[k];
+    const label = `${LEVELS[k]} ${k}×${k}`;
+    if (!g || !g.done) return `⬜ ${label}`;
+    return `🟩 ${label} · ${fmt(g.seconds)}` + (g.hints ? ` · 💡${g.hints}` : "");
+  });
+  return `Patchwork Pals #${puzzleNo(store.day)} ${S.emoji}\n${prettyDate(store.day)}\n\n${lines.join("\n")}\n\n${SHARE_URL}`;
+}
+
+function render() {
+  const n = S.n, bad = conflicts();
+  boardEl.classList.toggle("locked", S.done);
+  cells.forEach((c, i) => {
+    const m = S.marks[i];
+    const html = m === 2 ? `<span class="cat" aria-hidden="true">${S.emoji}</span>` : m === 1 ? '<span class="x">×</span>' : "";
+    const key = `${m}${S.emoji}`;
+    if (c.dataset.m !== key) { c.innerHTML = html; c.dataset.m = key; }
+    c.classList.toggle("marked", m === 1);
+    c.classList.toggle("bad", bad.has(i));
+    c.classList.toggle("pop", i === popped);
+    c.setAttribute("aria-label",
+      `Row ${((i / n) | 0) + 1}, column ${(i % n) + 1}, ${m === 2 ? S.pal : m === 1 ? "marked empty" : "empty"}`);
+  });
+
+  const placed = S.marks.filter((m) => m === 2).length;
+  document.getElementById("count").textContent = `${placed}/${n}`;
+  document.getElementById("timer").textContent = fmt(S.seconds);
+  document.getElementById("meta").textContent = `#${puzzleNo(S.day)} · ${prettyDate(S.day)} · ${LEVELS[n]} ${n}×${n}`;
+  document.getElementById("undo").disabled = S.done || !S.history.length;
+  document.getElementById("clear").disabled = S.done || !S.marks.some(Boolean);
+  document.getElementById("hint").disabled = S.done;
+  document.querySelectorAll(".em").forEach((e) => { e.textContent = S.emoji; });
+
+  for (const b of document.querySelectorAll("#diff button")) {
+    const k = +b.dataset.d, g = store.games[k];
+    const solved = !!(g && g.done);
+    b.setAttribute("aria-pressed", String(k === n));
+    b.classList.toggle("solved", solved);
+    b.querySelector("small").textContent = solved ? `✓ ${fmt(g.seconds)}` : `${k}×${k}`;
+  }
+
+  document.getElementById("win").hidden = !S.done;
+  if (S.done) {
+    document.getElementById("win-title").textContent = `Every ${S.pal} found its patch! ${S.emoji}`;
+    const left = Object.keys(LEVELS).filter((k) => !(store.games[k] && store.games[k].done)).map((k) => LEVELS[k]);
+    document.getElementById("win-text").textContent =
+      `You solved today's ${LEVELS[n].toLowerCase()} puzzle in ${fmt(S.seconds)}` +
+      (S.hints ? ` with ${S.hints} hint${S.hints > 1 ? "s" : ""}.` : " with no hints.") +
+      (left.length ? ` Still open today: ${left.join(", ")}.` : " That's every level for today.");
+    document.getElementById("countdown").textContent = untilMidnight();
+    document.getElementById("share-x").href = `https://x.com/intent/post?text=${encodeURIComponent(resultText())}`;
+  }
+}
+
+document.querySelectorAll("#diff button").forEach((b) =>
+  b.addEventListener("click", () => { if (+b.dataset.d !== S.n) openLevel(+b.dataset.d); })
+);
+document.getElementById("undo").addEventListener("click", undo);
+document.getElementById("clear").addEventListener("click", clearBoard);
+document.getElementById("hint").addEventListener("click", hint);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { closeSheet(); return; }
+  if (S && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+});
+
+function flash(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.textContent = ""; }, 3000);
+}
+document.getElementById("copy").addEventListener("click", () => {
+  const text = resultText();
+  const fb = document.getElementById("fallback");
+  const showFallback = () => {
+    fb.value = text;
+    fb.hidden = false;
+    fb.focus();
+    fb.select();
+    flash("copy-status", "Copying was blocked. The result is selected below, so press Ctrl+C or ⌘C.");
+  };
+  try {
+    navigator.clipboard.writeText(text).then(() => { fb.hidden = true; flash("copy-status", "Result copied."); }, showFallback);
+  } catch (_) {
+    showFallback();
+  }
+});
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawCard() {
+  const W = 1080, H = 1920, n = S.n;
+  const cv = document.createElement("canvas");
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext("2d");
+  const display = '"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif';
+  const mono = '"IBM Plex Mono", ui-monospace, monospace';
+  const emojiFont = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+
+  ctx.fillStyle = "#15171d";
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+
+  ctx.font = `200px ${emojiFont}`;
+  ctx.fillText(S.emoji, W / 2, 360);
+  ctx.fillStyle = "#f3f1ea";
+  ctx.font = `700 96px ${display}`;
+  ctx.fillText("Patchwork Pals", W / 2, 500);
+  ctx.fillStyle = "#9ba0ac";
+  ctx.font = `500 40px ${mono}`;
+  ctx.fillText(`#${puzzleNo(store.day)} · ${prettyDate(store.day)}`, W / 2, 570);
+
+  // Today's board, patches only, so the card never gives away the answer.
+  const size = 640, gap = 70 / n, x0 = (W - size) / 2, y0 = 660;
+  const cell = (size - gap * (n - 1)) / n;
+  for (let i = 0; i < n * n; i++) {
+    const r = (i / n) | 0, c = i % n;
+    ctx.fillStyle = CARD_COLORS[S.colors[S.regions[i]]];
+    roundRect(ctx, x0 + c * (cell + gap), y0 + r * (cell + gap), cell, cell, cell * 0.16);
+    ctx.fill();
+  }
+
+  ctx.textAlign = "left";
+  let y = 1440;
+  for (const k of Object.keys(LEVELS)) {
+    const g = store.games[k], solved = !!(g && g.done), active = +k === n;
+    ctx.fillStyle = solved ? "#5fd39a" : "#3a3f4b";
+    roundRect(ctx, 150, y - 46, 56, 56, 12);
+    ctx.fill();
+    if (solved) {
+      ctx.strokeStyle = "#15171d";
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(164, y - 18);
+      ctx.lineTo(176, y - 4);
+      ctx.lineTo(194, y - 32);
+      ctx.stroke();
+    }
+    ctx.fillStyle = active ? "#f3f1ea" : "#c9ccd4";
+    ctx.font = `${active ? 700 : 600} 48px ${display}`;
+    ctx.fillText(`${LEVELS[k]} ${k}×${k}`, 240, y);
+    ctx.textAlign = "right";
+    ctx.font = `500 44px ${mono}`;
+    ctx.fillStyle = solved ? "#f3f1ea" : "#6b7080";
+    ctx.fillText(solved ? fmt(g.seconds) + (g.hints ? ` 💡${g.hints}` : "") : "—", W - 150, y);
+    ctx.textAlign = "left";
+    y += 96;
+  }
+  return cv;
+}
+
+let cardCanvas = null;
+const sheetEl = document.getElementById("ig");
+const helpEl = document.getElementById("help");
+function closeSheet() {
+  sheetEl.hidden = true;
+  helpEl.hidden = true;
+}
+function openHelp() {
+  helpEl.hidden = false;
+  document.getElementById("help-ok").focus();
+  try { localStorage.setItem("patchwork-pals-seen-help", "1"); } catch (_) {}
+}
+document.getElementById("help-open").addEventListener("click", openHelp);
+document.getElementById("help-close").addEventListener("click", closeSheet);
+document.getElementById("help-ok").addEventListener("click", closeSheet);
+helpEl.addEventListener("click", (e) => { if (e.target === helpEl) closeSheet(); });
+document.getElementById("share-ig").addEventListener("click", async () => {
+  try { await document.fonts.ready; } catch (_) {}
+  cardCanvas = drawCard();
+  document.getElementById("ig-img").src = cardCanvas.toDataURL("image/png");
+  document.getElementById("ig-status").textContent = "";
+  sheetEl.hidden = false;
+  document.getElementById("ig-close").focus();
+});
+document.getElementById("ig-close").addEventListener("click", closeSheet);
+sheetEl.addEventListener("click", (e) => { if (e.target === sheetEl) closeSheet(); });
+document.getElementById("ig-copy").addEventListener("click", () => {
+  const blocked = () => flash("ig-status", "Your browser blocked copying the image. Long-press or right-click it and save it instead.");
+  try {
+    const blob = new Promise((res) => cardCanvas.toBlob(res, "image/png"));
+    navigator.clipboard.write([new ClipboardItem({ "image/png": blob })])
+      .then(() => flash("ig-status", "Image copied. Paste it into your Instagram story."), blocked);
+  } catch (_) {
+    blocked();
+  }
+});
+
+setInterval(() => {
+  if (!S) return;
+  if (dayKey() !== store.day) {
+    store = freshStore(dayKey(), S.n);
+    puzzles = {};
+    openLevel(S.n);
+    return;
+  }
+  if (S.done) {
+    document.getElementById("countdown").textContent = untilMidnight();
+    return;
+  }
+  if (!S.started || document.hidden) return;
+  S.seconds++;
+  document.getElementById("timer").textContent = fmt(S.seconds);
+  if (S.seconds % 5 === 0) persist();
+}, 1000);
+
+function start() {
+  store = loadStore();
+  openLevel(LEVELS[store.last] ? +store.last : 6);
+  let seen = false;
+  try { seen = !!localStorage.getItem("patchwork-pals-seen-help"); } catch (_) {}
+  if (!seen) openHelp();
+}
+start();
+</script>
+</body>
+</html>
